@@ -13,8 +13,6 @@ export default async function connect_db() {
   const uri = process.env.DB_URI
   const dbName = process.env.DB_NAME
 
-  console.log(uri, '####')
-
   try {
     const connection = await mongoose.connect(uri, { dbName })
     console.info(`Connected to MongoDB: ${uri}`)
