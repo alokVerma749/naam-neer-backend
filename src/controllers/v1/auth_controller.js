@@ -25,7 +25,7 @@ export const login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, email: user.email },
+      { id: user._id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '6h' }
     );
@@ -42,6 +42,7 @@ export const login = async (req, res) => {
       user: {
         email: user.email,
         name: user.name,
+        role: user.role
       }
     });
 
@@ -84,11 +85,6 @@ export const register = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-
-export async function check_auth(req, res) {
-  // req?.cookies ||
-  res.status(201).send("cookie not found")
-}
 
 export const verifyEmailById = async (req, res) => {
   const { userId } = req.params;
