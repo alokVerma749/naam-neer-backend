@@ -3,113 +3,120 @@ import jwt from 'jsonwebtoken';
 
 import User from '../../models/user.js';
 import sendVerificationEmail from '../../utils/send_mail.js';
+import { loginSchema, registerSchema, verifyEmailSchema } from '../../validators/auth.schema.js';
+import { validate } from '../../middlewares/validate.js';
 
-export const login = async (req, res) => {
-  const { email, password } = req.body;
+export const login = [
+  validate(loginSchema),
+  async (req, res) => {
+    const { email, password } = req.body;
 
-  try {
-    const user = await User.findOne({ email });
+    try {
+      const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    if (!user.isVerified) {
-      return res.status(400).json({ success: false, message: 'Please verify your email before logging in.' });
-    }
-
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordCorrect) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '6h' }
-    );
-
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 6000
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      user: {
-        email: user.email,
-        name: user.name,
-        role: user.role
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
       }
-    });
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+      if (!user.isVerified) {
+        return res.status(400).json({ success: false, message: 'Please verify your email before logging in.' });
+      }
 
-export const register = async (req, res) => {
-  const { email, mobileNum, name, NIC, password } = req.body;
+      const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
-  try {
-    let existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
+      if (!isPasswordCorrect) {
+        return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      }
+
+      const token = jwt.sign(
+        { id: user._id, email: user.email, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '6h' }
+      );
+
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 6000,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        user: {
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
     }
+  },
+];
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+export const register = [
+  validate(registerSchema),
+  async (req, res) => {
+    const { email, mobileNum, name, NIC, password } = req.body;
 
-    const newUser = new User({
-      email,
-      mobileNum,
-      name,
-      NIC,
-      password: hashedPassword,
-      isVerified: false,
-    });
+    try {
+      let existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ success: false, message: 'User already exists' });
+      }
 
-    const savedUser = await newUser.save();
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Send verification email with link
-    await sendVerificationEmail(email, savedUser._id);
+      const newUser = new User({
+        email,
+        mobileNum,
+        name,
+        NIC,
+        password: hashedPassword,
+        isVerified: false,
+      });
 
-    res.status(201).json({ success: true, message: 'User registered. Please check your email for verification.' });
+      const savedUser = await newUser.save();
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+      // Send verification email with link
+      await sendVerificationEmail(email, savedUser._id);
 
-export const verifyEmailById = async (req, res) => {
-  const { userId } = req.params;
-
-  try {
-    // Find the user by ID
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      res.status(201).json({ success: true, message: 'User registered. Please check your email for verification.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
     }
+  },
+];
 
-    // If the user is already verified
-    if (user.isVerified) {
-      return res.status(400).json({ success: false, message: 'User is already verified' });
+export const verifyEmailById = [
+  async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+      // Find the user by ID
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      // If the user is already verified
+      if (user.isVerified) {
+        return res.status(400).json({ success: false, message: 'User is already verified' });
+      }
+
+      // Update the user's isVerified status
+      user.isVerified = true;
+      await user.save();
+
+      res.status(200).json({ success: true, message: 'Email verified successfully!' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
     }
-
-    // Update the user's isVerified status
-    user.isVerified = true;
-    await user.save();
-
-    res.status(200).json({ success: true, message: 'Email verified successfully!' });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+  },
+];
